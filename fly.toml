@@ -1,5 +1,5 @@
 app = "shift-ai-backend"
-primary_region = "dxb"  # Dubai — closest to Saudi Arabia
+primary_region = "sin"
 
 [build]
 
