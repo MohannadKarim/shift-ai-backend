@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.dependencies import get_current_user, SuperAdminOnly
+from app.dependencies import get_current_user, super_admin_only
 from app.services.firebase import set_user_role, get_db
 from datetime import datetime, timezone
 
@@ -8,16 +8,11 @@ router = APIRouter()
 
 @router.post("/verify")
 def verify(user: dict = Depends(get_current_user)):
-    """
-    Verify Firebase token and return user info + role.
-    Called by frontend on every login to confirm auth state.
-    """
     db = get_db()
     doc = db.collection("users").document(user["uid"]).get()
     role = "Team Member"
     if doc.exists:
         role = doc.to_dict().get("role", "Team Member")
-
     return {
         "uid": user.get("uid"),
         "email": user.get("email"),
@@ -26,8 +21,7 @@ def verify(user: dict = Depends(get_current_user)):
 
 
 @router.post("/set-role")
-def assign_role(body: dict, user: dict = Depends(SuperAdminOnly)):
-    """Assign a Firebase custom claim role. Super Admin only."""
+def assign_role(body: dict, user: dict = Depends(super_admin_only)):
     uid = body.get("uid")
     role = body.get("role")
     if not uid or not role:
