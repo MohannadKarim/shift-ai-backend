@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.dependencies import get_current_user, AdminOnly
+from app.dependencies import get_current_user, admin_only
 from app.services.firebase import get_db
 
 router = APIRouter()
@@ -35,14 +35,14 @@ def leaderboard_by_dept(department: str, user: dict = Depends(get_current_user))
 
 
 @router.get("/")
-def list_users(user: dict = Depends(AdminOnly)):
+def list_users(user: dict = Depends(admin_only)):
     db = get_db()
     docs = db.collection("users").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
 
 @router.put("/{uid}/role")
-def update_role(uid: str, body: dict, user: dict = Depends(AdminOnly)):
+def update_role(uid: str, body: dict, user: dict = Depends(admin_only)):
     db = get_db()
     doc = db.collection("users").document(uid).get()
     if not doc.exists:
