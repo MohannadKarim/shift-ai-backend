@@ -13,18 +13,12 @@ def agent_chat(
     body: AgentChatRequest,
     user: dict = Depends(get_current_user),
 ):
-    """
-    Run the AI agent for a specific workflow.
-    Accepts message + full conversation history from the UI.
-    """
     db = get_db()
     doc = db.collection("workflows").document(workflow_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     workflow = doc.to_dict()
-
-    # Increment usage count
     db.collection("workflows").document(workflow_id).update(
         {"usageCount": workflow.get("usageCount", 0) + 1}
     )
