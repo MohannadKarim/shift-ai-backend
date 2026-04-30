@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.dependencies import get_current_user, AdminOnly
+from app.dependencies import get_current_user, admin_only
 from app.services.firebase import get_db
 from app.services.anthropic import analyze_submission as ai_analyze
 from app.models.models import SubmissionCreate, ApproveSubmissionRequest, AnalyzeSubmissionRequest, AnalyzeSubmissionResponse
@@ -9,8 +9,7 @@ router = APIRouter()
 
 
 @router.get("/")
-def list_all_submissions(user: dict = Depends(AdminOnly)):
-    """Admin only — list all submissions."""
+def list_all_submissions(user: dict = Depends(admin_only)):
     db = get_db()
     docs = db.collection("submissions").order_by("createdAt", direction="DESCENDING").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
@@ -18,7 +17,6 @@ def list_all_submissions(user: dict = Depends(AdminOnly)):
 
 @router.get("/mine")
 def list_my_submissions(user: dict = Depends(get_current_user)):
-    """Current user's submissions."""
     db = get_db()
     docs = (
         db.collection("submissions")
@@ -27,6 +25,15 @@ def list_my_submissions(user: dict = Depends(get_current_user)):
         .stream()
     )
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+
+@router.post("/analyze")
+def analyze_submission_endpoint(body: AnalyzeSubmissionRequest, user: dict = Depends(get_current_user)):
+    result = ai_analyze(body.title, body.description)
+    return AnalyzeSubmissionResponse(
+        tags=result.get("tags", []),
+        insights=result.get("insights", []),
+    )
 
 
 @router.get("/{submission_id}")
@@ -60,47 +67,29 @@ def create_submission(body: SubmissionCreate, user: dict = Depends(get_current_u
 def approve_submission(
     submission_id: str,
     body: ApproveSubmissionRequest,
-    user: dict = Depends(AdminOnly),
+    user: dict = Depends(admin_only),
 ):
-    """Approve a submission and award points to the user."""
     db = get_db()
     doc_ref = db.collection("submissions").document(submission_id)
     doc = doc_ref.get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Submission not found")
-
     submission = doc.to_dict()
-    doc_ref.update({
-        "status": "approved",
-        "pointsAwarded": body.pointsAwarded,
-    })
-
-    # Award points to the user
+    doc_ref.update({"status": "approved", "pointsAwarded": body.pointsAwarded})
     user_ref = db.collection("users").document(submission["userId"])
     user_doc = user_ref.get()
     if user_doc.exists:
         current_points = user_doc.to_dict().get("points", 0) + body.pointsAwarded
         new_level = max(1, current_points // 100)
         user_ref.update({"points": current_points, "level": new_level})
-
     return {"message": "Submission approved", "pointsAwarded": body.pointsAwarded}
 
 
 @router.put("/{submission_id}/reject")
-def reject_submission(submission_id: str, user: dict = Depends(AdminOnly)):
+def reject_submission(submission_id: str, user: dict = Depends(admin_only)):
     db = get_db()
     doc = db.collection("submissions").document(submission_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Submission not found")
     db.collection("submissions").document(submission_id).update({"status": "rejected"})
     return {"message": "Submission rejected"}
-
-
-@router.post("/analyze", response_model=AnalyzeSubmissionResponse)
-def analyze_submission_endpoint(body: AnalyzeSubmissionRequest, user: dict = Depends(get_current_user)):
-    """Analyze a submission using Claude Haiku before saving."""
-    result = ai_analyze(body.title, body.description)
-    return AnalyzeSubmissionResponse(
-        tags=result.get("tags", []),
-        insights=result.get("insights", []),
-    )
